@@ -45,11 +45,61 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 	return true;
 }
 
+class BarterFixHook
+{
+public:
+	static void Hook()
+	{
+		struct Code : Xbyak::CodeGenerator
+		{
+			Code(uintptr_t func_addr)
+			{
+				// r13 == cur_IED
+				// r15 == new_IED
+				// cont_handle == [rbp+57h+var_9C]
+
+				mov(rdx, r13);
+				mov(r8, r15);
+				mov(r9, ptr[rbp - 0x49]);
+				mov(rax, func_addr);
+				jmp(rax);
+			}
+		} xbyakCode{ uintptr_t(distribute) };
+
+		_SetCount_14010E5701 = FenixUtils::add_trampoline<5, 15895, 0xb7e, true>(&xbyakCode);  // SkyrimSE.exe+1EB5AE
+		_SetCount_14010E5701 = FenixUtils::add_trampoline<5, 15895, 0xc7e, true>(&xbyakCode);  // SkyrimSE.exe+1EB6AE
+	}
+
+private:
+	static void distribute(RE::ExtraDataList* new_EDL, RE::InventoryEntryData* cur_IED,
+		[[maybe_unused]] RE::InventoryEntryData* new_IED, uint32_t cont_handle)
+	{
+		auto count = cur_IED->countDelta;
+		while (count >= INT16_MAX || count <= INT16_MIN) {
+			int32_t cur_count = count > 0 ? 30000 : -30000;
+			
+			auto new_EDL_new = new RE::ExtraDataList();
+			_generic_foo_<11534, void(RE::ExtraDataList * list, uint32_t * handle)>::eval(new_EDL_new, &cont_handle);
+			_SetCount_14010E5701(new_EDL_new, cur_count);
+			new_IED->AddExtraList(new_EDL_new);
+
+			count -= cur_count;
+		}
+
+		if (count) {
+			_SetCount_14010E5701(new_EDL, count);
+		}
+	}
+
+	static inline REL::Relocation<void(RE::ExtraDataList* a1, int16_t count)> _SetCount_14010E5701;
+	static inline REL::Relocation<void(RE::ExtraDataList* a1, int16_t count)> _SetCount_14010E5702;
+};
+
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 {
 	switch (message->type) {
 	case SKSE::MessagingInterface::kDataLoaded:
-		//
+		BarterFixHook::Hook();
 
 		break;
 	}
